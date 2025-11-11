@@ -33,15 +33,17 @@ const ReportTimelineCalculator = () => {
 
   // Editorial
   const [editorial, setEditorial] = useState({
-    duration: 10,
-    review1: 3,
-    review2: 3,
-    review3: 3,
+    dataCollection: 5,
+    contentDevelopment: 10,
+    contentReview: 3,
+    clientReview1: 3,
+    clientReview2: 3,
+    clientReview3: 3,
+    finalReview: 2,
     goodwill: 0,
-    approval: 2,
-    review1Name: 'Client first review',
-    review2Name: 'Client second review',
-    review3Name: 'Client third review',
+    review1Name: 'Content review 1',
+    review2Name: 'Content review 2',
+    review3Name: 'Content review 3',
     skipReview1: false,
     skipReview2: false,
     skipReview3: false
@@ -91,8 +93,22 @@ const ReportTimelineCalculator = () => {
   });
 
   // Result states
-  const [timeline, setTimeline] = useState(null);
-  const [warnings, setWarnings] = useState([]);
+  interface Phase {
+    name: string;
+    start: Date | null;
+    end: Date | null;
+    days: number;
+    reviews?: Array<{ name: string; date: Date | null }>;
+    milestones?: Array<{ name: string; date: Date | null }>;
+    theme?: string;
+  }
+
+  const [timeline, setTimeline] = useState<{
+    phases: Phase[];
+    totalDays: number;
+    totalInternalDays: number;
+  } | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   // Helper: parse holiday list
   const parseHolidayList = () => {
@@ -103,17 +119,24 @@ const ReportTimelineCalculator = () => {
   };
 
   // Add or subtract working days
-  const addWorkingDays = (date, days, forward = true) => {
+  interface IAddWorkingDays {
+    (date: Date | string | null | undefined, days: number, forward?: boolean): Date | null;
+  }
+  type ISODateString = string;
+  type HolidayList = ISODateString[];
+
+  const addWorkingDays: IAddWorkingDays = (date, days, forward = true) => {
     if (!date) return null;
-    if (days === 0) return new Date(date);
-    const result = new Date(date);
-    const holidayList = parseHolidayList();
-    let remaining = Math.abs(days);
-    const direction = forward ? 1 : -1;
+    if (days === 0) return new Date(date as Date | string);
+    const result = new Date(date as Date | string);
+    const holidayList: HolidayList = parseHolidayList();
+    let remaining: number = Math.abs(days);
+    const direction: number = forward ? 1 : -1;
     while (remaining > 0) {
       result.setDate(result.getDate() + direction);
-      const isWeekend = !includeWeekends && (result.getDay() === 0 || result.getDay() === 6);
-      const iso = result.toISOString().split('T')[0];
+      const day = result.getDay();
+      const isWeekend = !includeWeekends && (day === 0 || day === 6);
+      const iso: ISODateString = result.toISOString().split('T')[0];
       const isHoliday = holidayList.includes(iso);
       if (!isWeekend && !isHoliday) remaining--;
     }
@@ -137,7 +160,8 @@ const ReportTimelineCalculator = () => {
     if (design.pages < 1) errs.push('Number of pages must be at least 1');
     // numeric limits
     const numericFields = [
-      { val: editorial.duration, name: 'Editorial duration' },
+      { val: editorial.dataCollection, name: 'Data collection days' },
+      { val: editorial.contentDevelopment, name: 'Content development days' },
       { val: design.pages, name: 'Pages' },
       { val: creative.designDuration, name: 'Creative design duration' }
     ];
@@ -162,12 +186,14 @@ const ReportTimelineCalculator = () => {
     if (!timestamp) setTimestamp(new Date().toISOString());
 
     // Compute per-phase days taking skip flags into account
-    const editorialDays = editorial.duration
-      + (!editorial.skipReview1 ? editorial.review1 : 0)
-      + (!editorial.skipReview2 ? editorial.review2 : 0)
-      + (!editorial.skipReview3 ? editorial.review3 : 0)
-      + editorial.goodwill
-      + editorial.approval;
+    const editorialDays = editorial.dataCollection
+      + editorial.contentDevelopment
+      + editorial.contentReview
+      + (!editorial.skipReview1 ? editorial.clientReview1 : 0)
+      + (!editorial.skipReview2 ? editorial.clientReview2 : 0)
+      + (!editorial.skipReview3 ? editorial.clientReview3 : 0)
+      + editorial.finalReview
+      + editorial.goodwill;
 
     const creativeDays = (creative.themeAvailable ? 0 : creative.themeDays)
       + creative.themeRev1
@@ -193,7 +219,7 @@ const ReportTimelineCalculator = () => {
     if (totalDays > 365) setWarnings(['Total timeline exceeds 365 days. Consider revising durations']);
 
     // Build phases with forward or backward scheduling
-    let phases = [];
+    let phases: Phase[] = [];
     if (schedulingMode === 'backward') {
       const deadline = new Date(finalDate);
       // Apply statutory days after print. Global goodwill is applied before statutory but after print production.
@@ -222,12 +248,23 @@ const ReportTimelineCalculator = () => {
       const webEnd = printStart;
       const webStart = webDeliverablesRequired ? addWorkingDays(webEnd, -webDays, false) : null;
 
+      // Calculate review dates for editorial (backward scheduling)
+      let cumulativeDays = editorial.dataCollection + editorial.contentDevelopment + editorial.contentReview;
+      const editorialReviews = [];
+      if (!editorial.skipReview1) {
+        editorialReviews.push({ name: editorial.review1Name, date: addWorkingDays(editorialStart, cumulativeDays, true) });
+        cumulativeDays += editorial.clientReview1;
+      }
+      if (!editorial.skipReview2) {
+        editorialReviews.push({ name: editorial.review2Name, date: addWorkingDays(editorialStart, cumulativeDays, true) });
+        cumulativeDays += editorial.clientReview2;
+      }
+      if (!editorial.skipReview3) {
+        editorialReviews.push({ name: editorial.review3Name, date: addWorkingDays(editorialStart, cumulativeDays, true) });
+      }
+
       phases = [
-        { name: 'Editorial & Content', start: editorialStart, end: editorialEnd, days: editorialDays, reviews: [
-          !editorial.skipReview1 && { name: editorial.review1Name, date: addWorkingDays(editorialStart, editorial.review1, true) },
-          !editorial.skipReview2 && { name: editorial.review2Name, date: addWorkingDays(editorialStart, editorial.review1 + editorial.review2, true) },
-          !editorial.skipReview3 && { name: editorial.review3Name, date: addWorkingDays(editorialStart, editorial.review1 + editorial.review2 + editorial.review3, true) }
-        ].filter(Boolean) },
+        { name: 'Editorial & Content', start: editorialStart, end: editorialEnd, days: editorialDays, reviews: editorialReviews },
         { name: 'Creative Development', start: creativeStart, end: creativeEnd, days: creativeDays, theme: creative.themeAvailable ? 'Theme available' : 'Theme development' },
         { name: 'Design & Layout', start: designStart, end: designEnd, days: designDays, milestones: [
           { name: '50% Delivery', date: design50 },
@@ -266,12 +303,23 @@ const ReportTimelineCalculator = () => {
       const statutoryStart = addWorkingDays(goodwillEnd, 1, true);
       const statutoryEnd = addWorkingDays(statutoryStart, statutory, true);
 
+      // Calculate review dates for editorial (forward scheduling)
+      let cumulativeDaysForward = editorial.dataCollection + editorial.contentDevelopment + editorial.contentReview;
+      const editorialReviewsForward = [];
+      if (!editorial.skipReview1) {
+        editorialReviewsForward.push({ name: editorial.review1Name, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
+        cumulativeDaysForward += editorial.clientReview1;
+      }
+      if (!editorial.skipReview2) {
+        editorialReviewsForward.push({ name: editorial.review2Name, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
+        cumulativeDaysForward += editorial.clientReview2;
+      }
+      if (!editorial.skipReview3) {
+        editorialReviewsForward.push({ name: editorial.review3Name, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
+      }
+
       phases = [
-        { name: 'Editorial & Content', start: editorialStart, end: editorialEnd, days: editorialDays, reviews: [
-          !editorial.skipReview1 && { name: editorial.review1Name, date: addWorkingDays(editorialStart, editorial.review1, true) },
-          !editorial.skipReview2 && { name: editorial.review2Name, date: addWorkingDays(editorialStart, editorial.review1 + editorial.review2, true) },
-          !editorial.skipReview3 && { name: editorial.review3Name, date: addWorkingDays(editorialStart, editorial.review1 + editorial.review2 + editorial.review3, true) }
-        ].filter(Boolean) },
+        { name: 'Editorial & Content', start: editorialStart, end: editorialEnd, days: editorialDays, reviews: editorialReviewsForward },
         { name: 'Creative Development', start: creativeStart, end: creativeEnd, days: creativeDays, theme: creative.themeAvailable ? 'Theme available' : 'Theme development' },
         { name: 'Design & Layout', start: designStart, end: designEnd, days: designDays, milestones: [
           { name: '50% Delivery', date: design50 },
@@ -325,7 +373,7 @@ const ReportTimelineCalculator = () => {
 
         <Card className="shadow">
           <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-            <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" /> Project Metadata</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" /> Project Overview</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -419,50 +467,61 @@ const ReportTimelineCalculator = () => {
           </CardHeader>
           {expandedSections.editorial && (
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label>Total Editorial Days</Label>
-                  <Input type="number" value={editorial.duration} onChange={e => setEditorial({ ...editorial, duration: parseInt(e.target.value) || 0 })} min={0} />
+                  <Label>Data Collection and Interviews (Days)</Label>
+                  <Input type="number" value={editorial.dataCollection} onChange={e => setEditorial({ ...editorial, dataCollection: parseInt(e.target.value) || 0 })} min={0} />
                 </div>
 
                 <div>
-                  <Label>Client Review 1 Name</Label>
-                  <Input value={editorial.review1Name} onChange={e => setEditorial({ ...editorial, review1Name: e.target.value })} />
+                  <Label>Content Development (Days)</Label>
+                  <Input type="number" value={editorial.contentDevelopment} onChange={e => setEditorial({ ...editorial, contentDevelopment: parseInt(e.target.value) || 0 })} min={0} />
+                </div>
+
+                <div>
+                  <Label>Content Review / Sub-editing (Days)</Label>
+                  <Input type="number" value={editorial.contentReview} onChange={e => setEditorial({ ...editorial, contentReview: parseInt(e.target.value) || 0 })} min={0} />
+                </div>
+
+                <div className="md:col-span-3">
+                  <Label className="text-base font-semibold">Client Review and Feedback</Label>
+                </div>
+
+                <div>
+                  <Label>{editorial.review1Name}</Label>
                   <div className="flex items-center gap-2 mt-2">
                     <Checkbox checked={editorial.skipReview1} onCheckedChange={(v) => setEditorial({ ...editorial, skipReview1: v })} />
                     <Label>Skip</Label>
-                    <Input type="number" value={editorial.review1} onChange={e => setEditorial({ ...editorial, review1: parseInt(e.target.value) || 0 })} className="w-20" />
+                    <Input type="number" value={editorial.clientReview1} onChange={e => setEditorial({ ...editorial, clientReview1: parseInt(e.target.value) || 0 })} className="w-20" placeholder="Days" />
                   </div>
                 </div>
 
                 <div>
-                  <Label>Client Review 2 Name</Label>
-                  <Input value={editorial.review2Name} onChange={e => setEditorial({ ...editorial, review2Name: e.target.value })} />
+                  <Label>{editorial.review2Name}</Label>
                   <div className="flex items-center gap-2 mt-2">
                     <Checkbox checked={editorial.skipReview2} onCheckedChange={(v) => setEditorial({ ...editorial, skipReview2: v })} />
                     <Label>Skip</Label>
-                    <Input type="number" value={editorial.review2} onChange={e => setEditorial({ ...editorial, review2: parseInt(e.target.value) || 0 })} className="w-20" />
+                    <Input type="number" value={editorial.clientReview2} onChange={e => setEditorial({ ...editorial, clientReview2: parseInt(e.target.value) || 0 })} className="w-20" placeholder="Days" />
                   </div>
                 </div>
 
                 <div>
-                  <Label>Client Review 3 Name</Label>
-                  <Input value={editorial.review3Name} onChange={e => setEditorial({ ...editorial, review3Name: e.target.value })} />
+                  <Label>{editorial.review3Name}</Label>
                   <div className="flex items-center gap-2 mt-2">
                     <Checkbox checked={editorial.skipReview3} onCheckedChange={(v) => setEditorial({ ...editorial, skipReview3: v })} />
                     <Label>Skip</Label>
-                    <Input type="number" value={editorial.review3} onChange={e => setEditorial({ ...editorial, review3: parseInt(e.target.value) || 0 })} className="w-20" />
+                    <Input type="number" value={editorial.clientReview3} onChange={e => setEditorial({ ...editorial, clientReview3: parseInt(e.target.value) || 0 })} className="w-20" placeholder="Days" />
                   </div>
+                </div>
+
+                <div>
+                  <Label>Final Review & Submission (Days)</Label>
+                  <Input type="number" value={editorial.finalReview} onChange={e => setEditorial({ ...editorial, finalReview: parseInt(e.target.value) || 0 })} min={0} />
                 </div>
 
                 <div>
                   <Label>Goodwill Days (for this phase)</Label>
                   <Input type="number" value={editorial.goodwill} onChange={e => setEditorial({ ...editorial, goodwill: parseInt(e.target.value) || 0 })} min={0} />
-                </div>
-
-                <div>
-                  <Label>Approval Days</Label>
-                  <Input type="number" value={editorial.approval} onChange={e => setEditorial({ ...editorial, approval: parseInt(e.target.value) || 0 })} min={0} />
                 </div>
               </div>
             </CardContent>
@@ -603,7 +662,7 @@ const ReportTimelineCalculator = () => {
         <Card className="shadow">
           <CardHeader className="bg-gradient-to-r from-red-600 to-red-700 text-white cursor-pointer" onClick={() => toggleSection('print')}>
             <CardTitle className="flex items-center justify-between">
-              <span>Print Production</span>
+              <span>Print Production (Preparation of files to go to print)</span>
               {expandedSections.print ? <ChevronUp /> : <ChevronDown />}
             </CardTitle>
           </CardHeader>
@@ -637,42 +696,69 @@ const ReportTimelineCalculator = () => {
               <CardTitle className="text-2xl">Project Plan and Deliverables</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 p-4 bg-blue-50 rounded">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>Project: <strong>{projectName}</strong></div>
+              <div className="mb-6 p-4 bg-blue-50 rounded">
+                <h3 className="font-semibold text-lg mb-3">Project Overview</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>Project Name: <strong>{projectName}</strong></div>
                   <div>Type: <strong>{reportType}</strong></div>
                   <div>Generated: <strong>{timestamp ? new Date(timestamp).toLocaleString() : '-'}</strong></div>
-                  <div>Scheduling: <strong>{schedulingMode}</strong></div>
+                  <div>Scheduling: <strong>{schedulingMode === 'backward' ? 'Backward' : 'Forward'}</strong></div>
                   <div>Statutory Days: <strong>{statutory}</strong></div>
                   <div>Total Duration: <strong>{timeline.totalDays} days</strong></div>
+                  <div className="md:col-span-3">Expected Day of Delivery: <strong>{formatDate(timeline.phases[timeline.phases.length - 1]?.end)}</strong></div>
                 </div>
               </div>
 
               <div className="space-y-4">
-                {timeline.phases.map((phase, idx) => (
-                  <div key={idx} className="border-l-4 border-blue-500 pl-4 py-3 bg-slate-50 rounded">
-                    <h4 className="font-semibold">{phase.name}</h4>
+                {/* Statutory Period displayed first, right below Project Overview */}
+                {timeline.phases.filter(p => p.name === 'Statutory Period').map((phase, idx) => (
+                  <div key={`statutory-${idx}`} className="border-l-4 border-blue-500 pl-4 py-3 bg-slate-50 rounded">
+                    <h4 className="font-semibold">Statutory Days</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2 text-sm">
                       <div>Start: <strong>{formatDate(phase.start)}</strong></div>
                       <div>End: <strong>{formatDate(phase.end)}</strong></div>
                       <div>Duration: <strong>{phase.days} days</strong></div>
                     </div>
-
-                    {phase.reviews && (
-                      <div className="mt-2">
-                        {phase.reviews.map((r, i) => <div key={i} className="text-sm">• {r.name}: <strong>{formatDate(r.date)}</strong></div>)}
-                      </div>
-                    )}
-
-                    {phase.milestones && (
-                      <div className="mt-2">
-                        {phase.milestones.map((m, i) => <div key={i} className="text-sm">✓ {m.name}: <strong>{formatDate(m.date)}</strong></div>)}
-                      </div>
-                    )}
-
-                    {phase.theme && <div className="mt-2 text-sm">Theme: <strong>{phase.theme}</strong></div>}
                   </div>
                 ))}
+
+                {/* All other phases in their original order */}
+                {timeline.phases.filter(p => p.name !== 'Statutory Period').map((phase, idx) => {
+                  const phaseMap: Record<string, string> = {
+                    'Editorial & Content': 'Editorial & Content',
+                    'Creative Development': 'Creative Development',
+                    'Design & Layout': 'Design & Layout',
+                    'Web Deliverables': 'Web Deliverables',
+                    'Print Production': 'Print Production',
+                    'Global Goodwill Buffer': 'Global Goodwill Buffer',
+                  };
+                  const displayName = phaseMap[phase.name] || phase.name;
+
+                  return (
+                    <div key={idx} className="border-l-4 border-blue-500 pl-4 py-3 bg-slate-50 rounded">
+                      <h4 className="font-semibold">{displayName}</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2 text-sm">
+                        <div>Start: <strong>{formatDate(phase.start)}</strong></div>
+                        <div>End: <strong>{formatDate(phase.end)}</strong></div>
+                        <div>Duration: <strong>{phase.days} days</strong></div>
+                      </div>
+
+                      {phase.reviews && (
+                        <div className="mt-2">
+                          {phase.reviews.map((r, i) => <div key={i} className="text-sm">• {r.name}: <strong>{formatDate(r.date)}</strong></div>)}
+                        </div>
+                      )}
+
+                      {phase.milestones && (
+                        <div className="mt-2">
+                          {phase.milestones.map((m, i) => <div key={i} className="text-sm">✓ {m.name}: <strong>{formatDate(m.date)}</strong></div>)}
+                        </div>
+                      )}
+
+                      {phase.theme && <div className="mt-2 text-sm">Theme: <strong>{phase.theme}</strong></div>}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
