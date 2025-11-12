@@ -131,11 +131,11 @@ const ReportTimelineCalculator = () => {
 
             // Load all the state from the saved data
             setProjectName(data.projectName);
-            setReportType(data.clientName);
+            setClientName(data.clientName);
             setSchedulingMode(data.schedulingMethod);
             setStartDate(data.startDate ? new Date(data.startDate).toISOString().split('T')[0] : '');
             setFinalDate(data.endDate ? new Date(data.endDate).toISOString().split('T')[0] : '');
-            setHolidays(data.numberOfHolidays ? '' : ''); // holidays are stored as count in DB
+            setHolidays(data.numberOfHolidays ? data.numberOfHolidays.toString() : '');
             setIncludeWeekends(data.useExtendedWeekends);
             setStatutory(data.finalDeliveryDays);
             setGlobalContingency(data.globalContingency || 0);
@@ -145,7 +145,17 @@ const ReportTimelineCalculator = () => {
             setExcludeDescription(data.excludeDescription || '');
 
             setEditorial(data.editorial);
-            setCreative(data.creative);
+            // Map creative data from DB structure back to frontend structure
+            setCreative({
+              themeAvailable: false,
+              themeDays: data.creative.moodboardProduction,
+              themeRev1: data.creative.creativeReview,
+              themeRev2: data.creative.daysPerRound,
+              designDuration: data.creative.conceptualization,
+              skipRev1: false,
+              skipRev2: data.creative.clientFeedbackRounds < 2,
+              finalSubmissionAuto: true
+            });
             setDesign(data.design);
             setWebDeliverablesRequired(data.webDevelopment.enabled);
             setWebDeliverables({
@@ -445,7 +455,7 @@ const ReportTimelineCalculator = () => {
     try {
       const data = {
         projectName,
-        clientName: reportType,
+        clientName: clientName || reportType,
         schedulingMethod: schedulingMode,
         startDate: startDate || undefined,
         endDate: finalDate || undefined,
@@ -567,225 +577,262 @@ const ReportTimelineCalculator = () => {
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
 
-    // Header with gradient background (simulated with rectangle)
-    doc.setFillColor(37, 99, 235); // Blue color
-    doc.rect(0, 0, pageWidth, 35, 'F');
+    // Professional Header with gradient effect
+    doc.setFillColor(30, 64, 175); // Darker blue
+    doc.rect(0, 0, pageWidth, 25, 'F');
 
-    // Title in white
-    doc.setFontSize(22);
+    // Add decorative line
+    doc.setFillColor(59, 130, 246); // Lighter blue
+    doc.rect(0, 23, pageWidth, 2, 'F');
+
+    // Title
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
-    doc.text('Report / Publication Timeline', pageWidth / 2, 15, { align: 'center' });
+    doc.text('Project Plan and Deliverables', pageWidth / 2, 14, { align: 'center' });
 
-    doc.setFontSize(10);
+    // Subtitle
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(savedData.projectName, pageWidth / 2, 23, { align: 'center' });
-    doc.setFontSize(9);
-    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}`, pageWidth / 2, 29, { align: 'center' });
+    doc.text(savedData.projectName, pageWidth / 2, 20, { align: 'center' });
 
     // Reset text color
     doc.setTextColor(0, 0, 0);
 
-    // Project Information Section
-    let yPosition = 45;
-    doc.setFontSize(12);
+    // Project Overview Section
+    let yPosition = 32;
+
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(37, 99, 235);
-    doc.text('Project Information', 14, yPosition);
+    doc.setTextColor(30, 64, 175); // Blue color for titles
+    doc.text('Project Overview', 14, yPosition);
 
-    // Draw line under section header
-    doc.setDrawColor(37, 99, 235);
-    doc.setLineWidth(0.5);
-    doc.line(14, yPosition + 1, pageWidth - 14, yPosition + 1);
-
-    yPosition += 8;
-    doc.setFontSize(10);
+    yPosition += 4;
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
+    doc.setTextColor(0, 0, 0); // Black text
 
-    // Two-column layout for project info
-    const leftCol = 14;
-    const rightCol = pageWidth / 2 + 5;
+    const leftMargin = 14;
+    const col1 = leftMargin;
+    const col2 = 75;
+    const col3 = 140;
 
+    // Project Overview - 3 columns
     doc.setFont('helvetica', 'bold');
-    doc.text('Client:', leftCol, yPosition);
+    doc.text('Project Name:', col1, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(savedData.clientName, leftCol + 25, yPosition);
+    doc.text(savedData.projectName, col1 + 22, yPosition);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Scheduling Mode:', rightCol, yPosition);
+    doc.text('Generated:', col2, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(savedData.schedulingMethod === 'backward' ? 'Backward (from deadline)' : 'Forward (from start)', rightCol + 38, yPosition);
+    doc.text(new Date().toLocaleString(), col2 + 18, yPosition);
 
-    yPosition += 6;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Layout Type:', leftCol, yPosition);
-    doc.setFont('helvetica', 'normal');
-    doc.text(savedData.design.layoutType === 'text-based' ? 'Text Based (10 pages/day)' : 'Heavy Infographics (5 pages/day)', leftCol + 25, yPosition);
-
-    doc.setFont('helvetica', 'bold');
-    doc.text('Total Duration:', rightCol, yPosition);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${timeline.totalDays} working days`, rightCol + 38, yPosition);
-
-    yPosition += 6;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Number of Pages:', leftCol, yPosition);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${savedData.design.pages} pages`, leftCol + 25, yPosition);
-
-    doc.setFont('helvetica', 'bold');
-    doc.text('Number of Designers:', rightCol, yPosition);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${savedData.design.numberOfDesigners} designer${savedData.design.numberOfDesigners > 1 ? 's' : ''}`, rightCol + 38, yPosition);
-
-    yPosition += 6;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Statutory Days:', leftCol, yPosition);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${savedData.finalDeliveryDays} days`, leftCol + 25, yPosition);
-
-    // Excluded period info if applicable
-    if (savedData.excludeDays && savedData.excludeStartDate && savedData.excludeEndDate) {
-      yPosition += 8;
-      doc.setFillColor(255, 237, 213); // Light orange background
-      doc.roundedRect(14, yPosition - 4, pageWidth - 28, 12, 2, 2, 'F');
-
-      doc.setFontSize(9);
-      doc.setTextColor(194, 65, 12); // Dark orange text
+    yPosition += 3;
+    if (savedData.clientName) {
       doc.setFont('helvetica', 'bold');
-      doc.text('⚠ Excluded Period:', 16, yPosition);
+      doc.text('Client Name:', col1, yPosition);
       doc.setFont('helvetica', 'normal');
-      let excludeText = `${formatDate(new Date(savedData.excludeStartDate))} to ${formatDate(new Date(savedData.excludeEndDate))}`;
-      if (savedData.excludeDescription) excludeText += ` - ${savedData.excludeDescription}`;
-      excludeText += ` (${calculateExcludedWorkingDays()} working days excluded)`;
-      doc.text(excludeText, 16, yPosition + 5);
-      yPosition += 12;
-      doc.setFontSize(10);
+      doc.text(savedData.clientName, col1 + 22, yPosition);
+      yPosition += 3;
     }
 
-    yPosition += 10;
+    // Excluded period if applicable
+    if (savedData.excludeDays && savedData.excludeStartDate && savedData.excludeEndDate) {
+      yPosition += 3;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
+      let excludeText = `Excluded Period: ${formatDate(new Date(savedData.excludeStartDate))} to ${formatDate(new Date(savedData.excludeEndDate))}`;
+      if (savedData.excludeDescription) excludeText += ` - ${savedData.excludeDescription}`;
+      excludeText += ` (${calculateExcludedWorkingDays()} working days excluded)`;
+      const maxWidth = pageWidth - 28;
+      const excludeLines = doc.splitTextToSize(excludeText, maxWidth);
+      doc.text(excludeLines, leftMargin, yPosition);
+      yPosition += excludeLines.length * 3;
+    }
 
-    // Timeline Section Header
+    // Expected Day of Delivery
+    yPosition += 4;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(37, 99, 235);
-    doc.text('Project Timeline', 14, yPosition);
-    doc.setDrawColor(37, 99, 235);
-    doc.line(14, yPosition + 1, pageWidth - 14, yPosition + 1);
+    doc.setFontSize(8);
+    doc.setTextColor(30, 64, 175); // Blue color for titles
+    doc.text('Expected Day of Delivery:', leftMargin, yPosition);
+    doc.setFontSize(7);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDate(timeline.phases[timeline.phases.length - 1]?.end), leftMargin + 40, yPosition);
 
     yPosition += 6;
-
-    // Prepare table data
-    const tableData: any[] = [];
-    timeline.phases.forEach((phase) => {
-      tableData.push([
-        phase.name,
-        formatDate(phase.start),
-        formatDate(phase.end),
-        phase.days.toString()
-      ]);
-
-      if (phase.reviews) {
-        phase.reviews.forEach(review => {
-          tableData.push([
-            `  └─ ${review.name}`,
-            formatDate(review.date),
-            '',
-            ''
-          ]);
-        });
-      }
-
-      if (phase.milestones) {
-        phase.milestones.forEach(milestone => {
-          tableData.push([
-            `  └─ ${milestone.name}`,
-            formatDate(milestone.date),
-            '',
-            ''
-          ]);
-        });
-      }
-
-      if (phase.theme) {
-        tableData.push([
-          `  └─ Theme: ${phase.theme}`,
-          '',
-          '',
-          ''
-        ]);
-      }
-    });
-
-    // Add table with professional styling
-    autoTable(doc, {
-      startY: yPosition,
-      head: [['Phase', 'Start Date', 'End Date', 'Days']],
-      body: tableData,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [37, 99, 235],
-        textColor: [255, 255, 255],
-        fontSize: 10,
-        fontStyle: 'bold',
-        halign: 'left',
-        cellPadding: 3
-      },
-      styles: {
-        fontSize: 9,
-        cellPadding: 2.5,
-        lineColor: [226, 232, 240],
-        lineWidth: 0.1
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252]
-      },
-      columnStyles: {
-        0: { cellWidth: 80, fontStyle: 'normal' },
-        1: { cellWidth: 35, halign: 'center' },
-        2: { cellWidth: 35, halign: 'center' },
-        3: { cellWidth: 20, halign: 'center' }
-      },
-      didParseCell: (data) => {
-        // Style milestone/review rows differently
-        if (data.section === 'body' && data.column.index === 0) {
-          const cellText = data.cell.raw as string;
-          if (cellText && cellText.includes('└─')) {
-            data.cell.styles.textColor = [100, 116, 139];
-            data.cell.styles.fontSize = 8;
-          }
-        }
-      }
-    });
-
-    // Add professional footer with expected delivery date
-    const docWithTable = doc as typeof doc & { lastAutoTable?: { finalY: number } };
-    const finalY = docWithTable.lastAutoTable?.finalY || yPosition;
-
-    // Footer box with light blue background
-    const footerY = finalY + 8;
-    doc.setFillColor(239, 246, 255);
-    doc.roundedRect(14, footerY, pageWidth - 28, 16, 2, 2, 'F');
-
-    // Expected delivery date text
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(37, 99, 235);
-    doc.text('Expected Day of Delivery:', 18, footerY + 7);
-
+    doc.setFontSize(7);
+    doc.setTextColor(0, 0, 0); // Black text
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    doc.setFontSize(11);
-    doc.text(formatDate(timeline.phases[timeline.phases.length - 1]?.end), 18, footerY + 13);
 
-    // Generated timestamp at bottom
-    const timestamp = footerY + 25;
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.setFont('helvetica', 'italic');
-    doc.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, timestamp, { align: 'center' });
+    // Helper function to check if we need a new page
+    const checkAndAddPage = (neededSpace: number) => {
+      if (yPosition + neededSpace > pageHeight - 20) {
+        doc.addPage();
+        yPosition = 20;
+        return true;
+      }
+      return false;
+    };
+
+    // Helper function to render a phase
+    const renderPhase = (phase: any, idx: number) => {
+      checkAndAddPage(30);
+
+      yPosition += 4;
+
+      // Phase header
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 64, 175); // Blue color for titles
+      doc.text(phase.name, leftMargin, yPosition);
+
+      yPosition += 4;
+      doc.setFontSize(7);
+      doc.setTextColor(0, 0, 0); // Black text
+      doc.setFont('helvetica', 'normal');
+
+      // Phase dates and duration - 3 columns with labels in bold
+      doc.setFont('helvetica', 'bold');
+      doc.text('Start:', col1, yPosition);
+      doc.setFont('helvetica', 'normal');
+      doc.text(formatDate(phase.start), col1 + 10, yPosition);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('End:', col2, yPosition);
+      doc.setFont('helvetica', 'normal');
+      doc.text(formatDate(phase.end), col2 + 8, yPosition);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Duration:', col3, yPosition);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${phase.days} days`, col3 + 15, yPosition);
+
+      yPosition += 3;
+
+      // Phase-specific details
+      if (phase.name === 'Editorial & Content') {
+        doc.setFontSize(7);
+        doc.text(`Data Collection: ${savedData.editorial.dataCollection} days`, col1, yPosition);
+        doc.text(`Writing: ${savedData.editorial.writing} days`, col2, yPosition);
+        doc.text(`Sub-editing: ${savedData.editorial.subEditing} days`, col3, yPosition);
+        yPosition += 3;
+        doc.text(`Internal Proofreading: ${savedData.editorial.internalProofreading} days`, col1, yPosition);
+        if (!savedData.editorial.skipReview1) {
+          doc.text(`${savedData.clientName || 'Client'} Review 1: ${savedData.editorial.clientReview1} days`, col2, yPosition);
+        }
+        if (!savedData.editorial.skipReview2) {
+          doc.text(`${savedData.clientName || 'Client'} Review 2: ${savedData.editorial.clientReview2} days`, col3, yPosition);
+        }
+        yPosition += 3;
+        if (!savedData.editorial.skipReview3) {
+          doc.text(`${savedData.clientName || 'Client'} Review 3: ${savedData.editorial.clientReview3} days`, col1, yPosition);
+        }
+        doc.text(`Final Review: ${savedData.editorial.finalReview} days`, col2, yPosition);
+        yPosition += 3;
+      } else if (phase.name === 'Creative Development') {
+        doc.text(`Theme Development: ${savedData.creative.moodboardProduction} days`, col1, yPosition);
+        doc.text(`${savedData.clientName || 'Client'} Review 1: ${savedData.creative.creativeReview} days`, col2, yPosition);
+        doc.text(`${savedData.clientName || 'Client'} Review 2: ${savedData.creative.daysPerRound} days`, col3, yPosition);
+        yPosition += 3;
+        doc.text(`Creative Conceptualization: ${savedData.creative.conceptualization} days`, col1, yPosition);
+        yPosition += 3;
+        if (phase.theme) {
+          doc.text(`Theme Status: ${phase.theme}`, col1, yPosition);
+          yPosition += 3;
+        }
+      } else if (phase.name === 'Design & Layout') {
+        doc.text(`Number of Pages: ${savedData.design.pages}`, col1, yPosition);
+        doc.text(`Layout Type: ${savedData.design.layoutType === 'text-based' ? 'Text Based' : 'Heavy Infographics'}`, col2, yPosition);
+        yPosition += 3;
+        doc.text(`Number of Designers: ${savedData.design.numberOfDesigners}`, col1, yPosition);
+        const layoutDays = Math.max(1, Math.ceil(savedData.design.pages / ((savedData.design.layoutType === 'text-based' ? 10 : 5) * Math.max(1, savedData.design.numberOfDesigners))));
+        doc.text(`Layout Work: ${layoutDays} days`, col2, yPosition);
+        doc.text(`Editorial Proofreading: ${savedData.design.editorialProofreading} days`, col3, yPosition);
+        yPosition += 3;
+        if (!savedData.design.skipReview1) {
+          doc.text(`${savedData.clientName || 'Client'} Review 1: ${savedData.design.review1} days`, col1, yPosition);
+        }
+        if (!savedData.design.skipReview2) {
+          doc.text(`${savedData.clientName || 'Client'} Review 2: ${savedData.design.review2} days`, col2, yPosition);
+        }
+        if (!savedData.design.skipReview3) {
+          doc.text(`${savedData.clientName || 'Client'} Review 3: ${savedData.design.review3} days`, col3, yPosition);
+        }
+        yPosition += 3;
+        if (savedData.design.contingency > 0) {
+          doc.text(`Contingency: ${savedData.design.contingency} days`, col1, yPosition);
+        }
+        doc.text(`Final Approval: ${savedData.design.approval} days`, col2, yPosition);
+        yPosition += 3;
+      } else if (phase.name === 'Web Deliverables' && savedData.webDevelopment.enabled) {
+        doc.text(`UI & UX Development: ${savedData.webDevelopment.frontendDevelopment} days`, col1, yPosition);
+        doc.text(`Deployment: ${savedData.webDevelopment.testing} days`, col2, yPosition);
+        yPosition += 3;
+      } else if (phase.name === 'Print Production') {
+        doc.text(`Preparation & Submission: ${savedData.printProduction.prePressProofing} days`, col1, yPosition);
+        doc.text(`Print Delivery: ${savedData.printProduction.printing} days`, col2, yPosition);
+        yPosition += 3;
+      }
+
+      // Review Milestones
+      if (phase.reviews && phase.reviews.length > 0) {
+        checkAndAddPage(phase.reviews.length * 3 + 5);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 64, 175); // Blue color for titles
+        doc.text('Review Milestones:', leftMargin, yPosition);
+        yPosition += 3;
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0); // Black text
+        phase.reviews.forEach(review => {
+          doc.text(`${review.name}: ${formatDate(review.date)}`, leftMargin, yPosition);
+          yPosition += 3;
+        });
+      }
+
+      // Key Milestones
+      if (phase.milestones && phase.milestones.length > 0) {
+        checkAndAddPage(phase.milestones.length * 3 + 5);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 64, 175); // Blue color for titles
+        doc.text('Key Milestones:', leftMargin, yPosition);
+        yPosition += 3;
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0); // Black text
+        phase.milestones.forEach(milestone => {
+          doc.text(`${milestone.name}: ${formatDate(milestone.date)}`, leftMargin, yPosition);
+          yPosition += 3;
+        });
+      }
+    };
+
+    // Process Statutory Period first (right after Project Overview)
+    const statutoryPhase = timeline.phases.find(p => p.name === 'Statutory Period');
+    if (statutoryPhase) {
+      renderPhase(statutoryPhase, 0);
+    }
+
+    // Process all other phases
+    timeline.phases.filter(p => p.name !== 'Statutory Period').forEach((phase, idx) => {
+      renderPhase(phase, idx);
+    });
+
+    // Footer
+    yPosition += 4;
+    checkAndAddPage(10);
+    doc.setFontSize(6);
+    doc.setTextColor(0, 0, 0); // Black text
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
 
     // Save the PDF
     doc.save(`${savedData.projectName.replace(/\s+/g, '_')}_Timeline.pdf`);
