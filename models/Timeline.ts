@@ -10,16 +10,22 @@ export interface ITimeline extends Document {
   numberOfHolidays: number;
   useExtendedWeekends: boolean;
   finalDeliveryDays: number;
+  globalContingency: number;
+  excludeDays: boolean;
+  excludeStartDate?: string;
+  excludeEndDate?: string;
+  excludeDescription?: string;
 
   editorial: {
     dataCollection: number;
-    contentDevelopment: number;
-    contentReview: number;
+    writing: number;
+    subEditing: number;
+    internalProofreading: number;
     clientReview1: number;
     clientReview2: number;
     clientReview3: number;
     finalReview: number;
-    goodwill: number;
+    contingency: number;
     review1Name: string;
     review2Name: string;
     review3Name: string;
@@ -38,12 +44,20 @@ export interface ITimeline extends Document {
   };
 
   design: {
-    templateDesign: number;
-    contentLayout: number;
-    designReview: number;
-    clientFeedbackRounds: number;
-    daysPerRound: number;
-    finalDesignApproval: number;
+    pages: number;
+    layoutType: string;
+    editorialProofreading: number;
+    review1: number;
+    review2: number;
+    review3: number;
+    contingency: number;
+    approval: number;
+    review1Name: string;
+    review2Name: string;
+    review3Name: string;
+    skipReview1: boolean;
+    skipReview2: boolean;
+    skipReview3: boolean;
   };
 
   webDevelopment: {
@@ -74,16 +88,22 @@ const TimelineSchema = new Schema<ITimeline>(
     numberOfHolidays: { type: Number, default: 0 },
     useExtendedWeekends: { type: Boolean, default: false },
     finalDeliveryDays: { type: Number, default: 0 },
+    globalContingency: { type: Number, default: 0 },
+    excludeDays: { type: Boolean, default: false },
+    excludeStartDate: { type: String },
+    excludeEndDate: { type: String },
+    excludeDescription: { type: String },
 
     editorial: {
       dataCollection: { type: Number, default: 5 },
-      contentDevelopment: { type: Number, default: 10 },
-      contentReview: { type: Number, default: 3 },
+      writing: { type: Number, default: 10 },
+      subEditing: { type: Number, default: 3 },
+      internalProofreading: { type: Number, default: 2 },
       clientReview1: { type: Number, default: 3 },
       clientReview2: { type: Number, default: 3 },
       clientReview3: { type: Number, default: 3 },
       finalReview: { type: Number, default: 2 },
-      goodwill: { type: Number, default: 0 },
+      contingency: { type: Number, default: 0 },
       review1Name: { type: String, default: 'Content review 1' },
       review2Name: { type: String, default: 'Content review 2' },
       review3Name: { type: String, default: 'Content review 3' },
@@ -102,12 +122,20 @@ const TimelineSchema = new Schema<ITimeline>(
     },
 
     design: {
-      templateDesign: { type: Number, default: 7 },
-      contentLayout: { type: Number, default: 10 },
-      designReview: { type: Number, default: 2 },
-      clientFeedbackRounds: { type: Number, default: 2 },
-      daysPerRound: { type: Number, default: 3 },
-      finalDesignApproval: { type: Number, default: 1 },
+      pages: { type: Number, default: 40 },
+      layoutType: { type: String, default: 'text-based' },
+      editorialProofreading: { type: Number, default: 2 },
+      review1: { type: Number, default: 4 },
+      review2: { type: Number, default: 4 },
+      review3: { type: Number, default: 4 },
+      contingency: { type: Number, default: 2 },
+      approval: { type: Number, default: 2 },
+      review1Name: { type: String, default: 'Client review & amends 1' },
+      review2Name: { type: String, default: 'Client review & amends 2' },
+      review3Name: { type: String, default: 'Client review & amends 3' },
+      skipReview1: { type: Boolean, default: false },
+      skipReview2: { type: Boolean, default: false },
+      skipReview3: { type: Boolean, default: false },
     },
 
     webDevelopment: {

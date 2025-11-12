@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 const ReportTimelineCalculator = () => {
   // Project metadata
   const [projectName, setProjectName] = useState('');
+  const [clientName, setClientName] = useState('');
   const [reportType, setReportType] = useState('Annual Report');
   const [timestamp, setTimestamp] = useState('');
   const [schedulingMode, setSchedulingMode] = useState('backward'); // backward default
@@ -49,9 +50,6 @@ const ReportTimelineCalculator = () => {
     clientReview3: 3,
     finalReview: 2,
     contingency: 0,
-    review1Name: 'Content review 1',
-    review2Name: 'Content review 2',
-    review3Name: 'Content review 3',
     skipReview1: false,
     skipReview2: false,
     skipReview3: false
@@ -64,8 +62,6 @@ const ReportTimelineCalculator = () => {
     themeRev1: 3,
     themeRev2: 3,
     designDuration: 5,
-    rev1Name: 'Revision 1',
-    rev2Name: 'Revision 2',
     skipRev1: false,
     skipRev2: false,
     finalSubmissionAuto: true
@@ -75,15 +71,13 @@ const ReportTimelineCalculator = () => {
   const [design, setDesign] = useState({
     pages: 40,
     layoutType: 'text-based', // 'text-based' or 'heavy-infographics'
+    numberOfDesigners: 1,
     editorialProofreading: 2,
     review1: 4,
     review2: 4,
     review3: 4,
     contingency: 2,
     approval: 2,
-    review1Name: 'Client review & amends 1',
-    review2Name: 'Client review & amends 2',
-    review3Name: 'Client review & amends 3',
     skipReview1: false,
     skipReview2: false,
     skipReview3: false
@@ -119,6 +113,7 @@ const ReportTimelineCalculator = () => {
     totalInternalDays: number;
   } | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [savedTimelineId, setSavedTimelineId] = useState<string | null>(null);
 
   // Load saved timeline from URL parameter
   useEffect(() => {
@@ -143,6 +138,11 @@ const ReportTimelineCalculator = () => {
             setHolidays(data.numberOfHolidays ? '' : ''); // holidays are stored as count in DB
             setIncludeWeekends(data.useExtendedWeekends);
             setStatutory(data.finalDeliveryDays);
+            setGlobalContingency(data.globalContingency || 0);
+            setExcludeDays(data.excludeDays || false);
+            setExcludeStartDate(data.excludeStartDate || '');
+            setExcludeEndDate(data.excludeEndDate || '');
+            setExcludeDescription(data.excludeDescription || '');
 
             setEditorial(data.editorial);
             setCreative(data.creative);
@@ -156,6 +156,9 @@ const ReportTimelineCalculator = () => {
               preparation: data.printProduction.prePressProofing,
               printDeliveryDays: data.printProduction.printing
             });
+
+            // Set the saved timeline ID and trigger calculation
+            setSavedTimelineId(id);
           } else {
             alert('Timeline not found or invalid ID.');
           }
@@ -270,7 +273,7 @@ const ReportTimelineCalculator = () => {
   };
 
   // Core calculation
-  const calculateTimeline = () => {
+  const calculateTimeline = async () => {
     const newWarnings = validateInputs();
     if (newWarnings.length > 0) {
       setWarnings(newWarnings);
@@ -299,7 +302,8 @@ const ReportTimelineCalculator = () => {
       + creative.designDuration;
 
     const pagesPerDay = design.layoutType === 'text-based' ? 10 : 5;
-    const designWorkDays = Math.max(1, Math.ceil(design.pages / pagesPerDay));
+    const basePagesPerDay = pagesPerDay * Math.max(1, design.numberOfDesigners);
+    const designWorkDays = Math.max(1, Math.ceil(design.pages / basePagesPerDay));
     const designDays = designWorkDays
       + design.editorialProofreading
       + (!design.skipReview1 ? design.review1 : 0)
@@ -350,16 +354,17 @@ const ReportTimelineCalculator = () => {
       // Calculate review dates for editorial (backward scheduling)
       let cumulativeDays = editorial.dataCollection + editorial.writing + editorial.subEditing + editorial.internalProofreading;
       const editorialReviews = [];
+      const displayClientName = clientName || 'Client';
       if (!editorial.skipReview1) {
-        editorialReviews.push({ name: editorial.review1Name, date: addWorkingDays(editorialStart, cumulativeDays, true) });
+        editorialReviews.push({ name: `${displayClientName} Review 1`, date: addWorkingDays(editorialStart, cumulativeDays, true) });
         cumulativeDays += editorial.clientReview1;
       }
       if (!editorial.skipReview2) {
-        editorialReviews.push({ name: editorial.review2Name, date: addWorkingDays(editorialStart, cumulativeDays, true) });
+        editorialReviews.push({ name: `${displayClientName} Review 2`, date: addWorkingDays(editorialStart, cumulativeDays, true) });
         cumulativeDays += editorial.clientReview2;
       }
       if (!editorial.skipReview3) {
-        editorialReviews.push({ name: editorial.review3Name, date: addWorkingDays(editorialStart, cumulativeDays, true) });
+        editorialReviews.push({ name: `${displayClientName} Review 3`, date: addWorkingDays(editorialStart, cumulativeDays, true) });
       }
 
       phases = [
@@ -405,16 +410,17 @@ const ReportTimelineCalculator = () => {
       // Calculate review dates for editorial (forward scheduling)
       let cumulativeDaysForward = editorial.dataCollection + editorial.writing + editorial.subEditing + editorial.internalProofreading;
       const editorialReviewsForward = [];
+      const displayClientNameForward = clientName || 'Client';
       if (!editorial.skipReview1) {
-        editorialReviewsForward.push({ name: editorial.review1Name, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
+        editorialReviewsForward.push({ name: `${displayClientNameForward} Review 1`, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
         cumulativeDaysForward += editorial.clientReview1;
       }
       if (!editorial.skipReview2) {
-        editorialReviewsForward.push({ name: editorial.review2Name, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
+        editorialReviewsForward.push({ name: `${displayClientNameForward} Review 2`, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
         cumulativeDaysForward += editorial.clientReview2;
       }
       if (!editorial.skipReview3) {
-        editorialReviewsForward.push({ name: editorial.review3Name, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
+        editorialReviewsForward.push({ name: `${displayClientNameForward} Review 3`, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
       }
 
       phases = [
@@ -434,11 +440,86 @@ const ReportTimelineCalculator = () => {
     }
 
     setTimeline({ phases, totalDays, totalInternalDays });
+
+    // Save to database
+    try {
+      const data = {
+        projectName,
+        clientName: reportType,
+        schedulingMethod: schedulingMode,
+        startDate: startDate || undefined,
+        endDate: finalDate || undefined,
+        numberOfHolidays: parseInt(holidays) || 0,
+        useExtendedWeekends: includeWeekends,
+        finalDeliveryDays: statutory,
+        globalContingency,
+        excludeDays,
+        excludeStartDate: excludeStartDate || undefined,
+        excludeEndDate: excludeEndDate || undefined,
+        excludeDescription: excludeDescription || undefined,
+        editorial,
+        creative,
+        design,
+        webDevelopment: {
+          enabled: webDeliverablesRequired,
+          frontendDevelopment: webDeliverables.uiuxDays,
+          backendIntegration: 0,
+          testing: webDeliverables.deploymentDays
+        },
+        printProduction: {
+          prePressProofing: print.preparation,
+          printing: print.printDeliveryDays,
+          binding: 0
+        }
+      };
+
+      const response = await fetch('/api/timeline', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSavedTimelineId(result.uniqueId);
+      } else {
+        console.error('Failed to save timeline:', result.error);
+      }
+    } catch (error) {
+      console.error('Error saving timeline:', error);
+    }
   };
 
   const formatDate = (d) => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // Fetch saved timeline data from database
+  const fetchSavedTimelineData = async () => {
+    if (!savedTimelineId) {
+      alert('Please calculate the timeline first.');
+      return null;
+    }
+
+    try {
+      const response = await fetch(`/api/timeline?id=${savedTimelineId}`);
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        alert('Failed to fetch timeline data.');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching timeline:', error);
+      alert('An error occurred while fetching the timeline.');
+      return null;
+    }
   };
 
   // copy summary text
@@ -471,8 +552,11 @@ const ReportTimelineCalculator = () => {
   };
 
   // Export to PDF
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     if (!timeline) return;
+
+    const savedData = await fetchSavedTimelineData();
+    if (!savedData) return;
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
@@ -489,7 +573,7 @@ const ReportTimelineCalculator = () => {
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(projectName, pageWidth / 2, 23, { align: 'center' });
+    doc.text(savedData.projectName, pageWidth / 2, 23, { align: 'center' });
     doc.setFontSize(9);
     doc.text(`Generated: ${new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}`, pageWidth / 2, 29, { align: 'center' });
 
@@ -520,18 +604,18 @@ const ReportTimelineCalculator = () => {
     doc.setFont('helvetica', 'bold');
     doc.text('Client:', leftCol, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(reportType, leftCol + 25, yPosition);
+    doc.text(savedData.clientName, leftCol + 25, yPosition);
 
     doc.setFont('helvetica', 'bold');
     doc.text('Scheduling Mode:', rightCol, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(schedulingMode === 'backward' ? 'Backward (from deadline)' : 'Forward (from start)', rightCol + 38, yPosition);
+    doc.text(savedData.schedulingMethod === 'backward' ? 'Backward (from deadline)' : 'Forward (from start)', rightCol + 38, yPosition);
 
     yPosition += 6;
     doc.setFont('helvetica', 'bold');
     doc.text('Layout Type:', leftCol, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(design.layoutType === 'text-based' ? 'Text Based (10 pages/day)' : 'Heavy Infographics (5 pages/day)', leftCol + 25, yPosition);
+    doc.text(savedData.design.layoutType === 'text-based' ? 'Text Based (10 pages/day)' : 'Heavy Infographics (5 pages/day)', leftCol + 25, yPosition);
 
     doc.setFont('helvetica', 'bold');
     doc.text('Total Duration:', rightCol, yPosition);
@@ -542,10 +626,10 @@ const ReportTimelineCalculator = () => {
     doc.setFont('helvetica', 'bold');
     doc.text('Statutory Days:', leftCol, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${statutory} days`, leftCol + 25, yPosition);
+    doc.text(`${savedData.finalDeliveryDays} days`, leftCol + 25, yPosition);
 
     // Excluded period info if applicable
-    if (excludeDays && excludeStartDate && excludeEndDate) {
+    if (savedData.excludeDays && savedData.excludeStartDate && savedData.excludeEndDate) {
       yPosition += 8;
       doc.setFillColor(255, 237, 213); // Light orange background
       doc.roundedRect(14, yPosition - 4, pageWidth - 28, 12, 2, 2, 'F');
@@ -555,8 +639,8 @@ const ReportTimelineCalculator = () => {
       doc.setFont('helvetica', 'bold');
       doc.text('⚠ Excluded Period:', 16, yPosition);
       doc.setFont('helvetica', 'normal');
-      let excludeText = `${formatDate(new Date(excludeStartDate))} to ${formatDate(new Date(excludeEndDate))}`;
-      if (excludeDescription) excludeText += ` - ${excludeDescription}`;
+      let excludeText = `${formatDate(new Date(savedData.excludeStartDate))} to ${formatDate(new Date(savedData.excludeEndDate))}`;
+      if (savedData.excludeDescription) excludeText += ` - ${savedData.excludeDescription}`;
       excludeText += ` (${calculateExcludedWorkingDays()} working days excluded)`;
       doc.text(excludeText, 16, yPosition + 5);
       yPosition += 12;
@@ -686,30 +770,33 @@ const ReportTimelineCalculator = () => {
     doc.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, timestamp, { align: 'center' });
 
     // Save the PDF
-    doc.save(`${projectName.replace(/\s+/g, '_')}_Timeline.pdf`);
+    doc.save(`${savedData.projectName.replace(/\s+/g, '_')}_Timeline.pdf`);
   };
 
   // Export to Excel
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (!timeline) return;
+
+    const savedData = await fetchSavedTimelineData();
+    if (!savedData) return;
 
     // Prepare data for Excel
     const worksheetData: any[] = [
       ['Report / Publication Timeline'],
       [],
-      ['Project:', projectName],
-      ['Client:', reportType],
+      ['Project:', savedData.projectName],
+      ['Client:', savedData.clientName],
       ['Generated:', new Date().toLocaleString()],
-      ['Scheduling Mode:', schedulingMode === 'backward' ? 'Backward (from deadline)' : 'Forward (from start)'],
-      ['Layout Type:', design.layoutType === 'text-based' ? 'Text Based (10 pages/day)' : 'Heavy Infographics (5 pages/day)'],
+      ['Scheduling Mode:', savedData.schedulingMethod === 'backward' ? 'Backward (from deadline)' : 'Forward (from start)'],
+      ['Layout Type:', savedData.design.layoutType === 'text-based' ? 'Text Based (10 pages/day)' : 'Heavy Infographics (5 pages/day)'],
       ['Total Duration:', `${timeline.totalDays} working days`],
-      ['Statutory Days:', statutory]
+      ['Statutory Days:', savedData.finalDeliveryDays]
     ];
 
     // Add excluded period info if applicable
-    if (excludeDays && excludeStartDate && excludeEndDate) {
-      let excludeText = `${formatDate(new Date(excludeStartDate))} to ${formatDate(new Date(excludeEndDate))}`;
-      if (excludeDescription) excludeText += ` - ${excludeDescription}`;
+    if (savedData.excludeDays && savedData.excludeStartDate && savedData.excludeEndDate) {
+      let excludeText = `${formatDate(new Date(savedData.excludeStartDate))} to ${formatDate(new Date(savedData.excludeEndDate))}`;
+      if (savedData.excludeDescription) excludeText += ` - ${savedData.excludeDescription}`;
       excludeText += ` (${calculateExcludedWorkingDays()} working days excluded)`;
       worksheetData.push(['Excluded Period:', excludeText]);
     }
@@ -775,63 +862,19 @@ const ReportTimelineCalculator = () => {
     ];
 
     // Save the Excel file
-    XLSX.writeFile(wb, `${projectName.replace(/\s+/g, '_')}_Timeline.xlsx`);
+    XLSX.writeFile(wb, `${savedData.projectName.replace(/\s+/g, '_')}_Timeline.xlsx`);
   };
 
   // Save and Generate Link
   const saveAndGenerateLink = async () => {
-    if (!projectName || !reportType) {
-      alert('Please fill in Project Title and Client Name before saving.');
+    if (!savedTimelineId) {
+      alert('Please calculate the timeline first before generating a link.');
       return;
     }
 
-    try {
-      const data = {
-        projectName,
-        clientName: reportType,
-        schedulingMethod: schedulingMode,
-        startDate: startDate || undefined,
-        endDate: finalDate || undefined,
-        numberOfHolidays: parseInt(holidays) || 0,
-        useExtendedWeekends: includeWeekends,
-        finalDeliveryDays: statutory,
-        editorial,
-        creative,
-        design,
-        webDevelopment: {
-          enabled: webDeliverablesRequired,
-          frontendDevelopment: webDeliverables.uiuxDays,
-          backendIntegration: 0,
-          testing: webDeliverables.deploymentDays
-        },
-        printProduction: {
-          prePressProofing: print.preparation,
-          printing: print.printDeliveryDays,
-          binding: 0
-        }
-      };
-
-      const response = await fetch('/api/timeline', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        const url = result.url;
-        await navigator.clipboard.writeText(url);
-        alert(`Timeline saved successfully!\n\nShareable link copied to clipboard:\n${url}`);
-      } else {
-        alert('Failed to save timeline. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error saving timeline:', error);
-      alert('An error occurred while saving the timeline.');
-    }
+    const url = `${window.location.origin}/?id=${savedTimelineId}`;
+    await navigator.clipboard.writeText(url);
+    alert(`Shareable link copied to clipboard:\n${url}`);
   };
 
   const toggleSection = (section) => {
@@ -856,7 +899,7 @@ const ReportTimelineCalculator = () => {
           <CardContent className="p-6">
             <div className="space-y-6">
               {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-slate-700">
                     Project Title <span className="text-red-500">*</span>
@@ -867,6 +910,19 @@ const ReportTimelineCalculator = () => {
                     onChange={e => setProjectName(e.target.value)}
                     placeholder="Enter project title"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-slate-700">
+                    Client Name
+                  </Label>
+                  <Input
+                    className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                    value={clientName}
+                    onChange={e => setClientName(e.target.value)}
+                    placeholder="Enter client name"
+                  />
+                  <p className="text-xs text-slate-500">Used in review names</p>
                 </div>
 
                 <div className="space-y-2">
@@ -1132,10 +1188,10 @@ const ReportTimelineCalculator = () => {
                 </div>
 
                 <div className="border-t pt-6">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-4">Client Review and Feedback</h4>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-4">{clientName || 'Client'} Review and Feedback</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium text-slate-700">{editorial.review1Name}</Label>
+                      <Label className="text-sm font-medium text-slate-700">{clientName || 'Client'} Review 1</Label>
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={editorial.skipReview1}
@@ -1154,7 +1210,7 @@ const ReportTimelineCalculator = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium text-slate-700">{editorial.review2Name}</Label>
+                      <Label className="text-sm font-medium text-slate-700">{clientName || 'Client'} Review 2</Label>
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={editorial.skipReview2}
@@ -1173,7 +1229,7 @@ const ReportTimelineCalculator = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium text-slate-700">{editorial.review3Name}</Label>
+                      <Label className="text-sm font-medium text-slate-700">{clientName || 'Client'} Review 3</Label>
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={editorial.skipReview3}
