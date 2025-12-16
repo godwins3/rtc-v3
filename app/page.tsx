@@ -160,7 +160,11 @@ const ReportTimelineCalculator = () => {
               skipRev1: false,
               skipRev2: data.creative.clientFeedbackRounds < 2,
               finalSubmissionAuto: true,
-              overlapEditorialCreative: data.creative.overlapEditorialCreative || false
+              overlapEditorialCreative: data.creative.overlapEditorialCreative || false,
+              conceptRev1: data.creative.conceptRev1 || 3,
+              conceptRev2: data.creative.conceptRev2 || 3,
+              skipConceptRev1: data.creative.skipConceptRev1 || false,
+              skipConceptRev2: data.creative.skipConceptRev2 || false
             });
             setDesign(data.design);
             setWebDeliverablesRequired(data.webDevelopment.enabled);
@@ -231,7 +235,7 @@ const ReportTimelineCalculator = () => {
   };
 
   // Utility: simple date difference in calendar days inclusive
-  const diffDaysInclusive = (start, end) => {
+  const diffDaysInclusive = (start: number, end: number) => {
     if (!start || !end) return 0;
     const ms = 24 * 60 * 60 * 1000;
     return Math.round((end - start) / ms) + 1;
@@ -585,7 +589,11 @@ const ReportTimelineCalculator = () => {
           clientFeedbackRounds: creative.skipRev2 ? 1 : 2,
           daysPerRound: creative.themeRev2,
           finalCreativeApproval: 1,
-          overlapEditorialCreative: creative.overlapEditorialCreative
+          overlapEditorialCreative: creative.overlapEditorialCreative,
+          conceptRev1: creative.conceptRev1,
+          conceptRev2: creative.conceptRev2,
+          skipConceptRev1: creative.skipConceptRev1,
+          skipConceptRev2: creative.skipConceptRev2
         },
         design,
         webDevelopment: {
@@ -621,7 +629,7 @@ const ReportTimelineCalculator = () => {
     }
   };
 
-  const formatDate = (d) => {
+  const formatDate = (d: string | number | Date | null) => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
   };
@@ -799,7 +807,7 @@ const ReportTimelineCalculator = () => {
     };
 
     // Helper function to render a phase
-    const renderPhase = (phase: any, idx: number) => {
+    const renderPhase = (phase: Phase, idx: number) => {
       checkAndAddPage(30);
 
       yPosition += 5;
@@ -909,7 +917,7 @@ const ReportTimelineCalculator = () => {
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(0, 0, 0); // Black text
-        phase.reviews.forEach(review => {
+        phase.reviews.forEach((review) => {
           doc.text(`${review.name}: ${formatDate(review.date)}`, leftMargin, yPosition);
           yPosition += 3.5;
         });
@@ -926,7 +934,7 @@ const ReportTimelineCalculator = () => {
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(0, 0, 0); // Black text
-        phase.milestones.forEach(milestone => {
+        phase.milestones.forEach((milestone) => {
           doc.text(`${milestone.name}: ${formatDate(milestone.date)}`, leftMargin, yPosition);
           yPosition += 3.5;
         });
@@ -1073,12 +1081,12 @@ const ReportTimelineCalculator = () => {
     }
   };
 
-  const toggleSection = (section) => {
+  const toggleSection = (section: 'editorial' | 'creative' | 'design' | 'web' | 'print') => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
   // small helper to mark required fields visually by returning className
-  const requiredClass = (val) => val ? '' : 'border-red-500';
+  const requiredClass = (val: any) => val ? '' : 'border-red-500';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
@@ -1196,7 +1204,7 @@ const ReportTimelineCalculator = () => {
                     <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                       <Checkbox
                         checked={includeWeekends}
-                        onCheckedChange={setIncludeWeekends}
+                        onCheckedChange={(c) => setIncludeWeekends(c === true)}
                         id="inclWeekends"
                         className="data-[state=checked]:bg-blue-600"
                       />
@@ -1391,7 +1399,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={editorial.skipReview1}
-                          onCheckedChange={(v) => setEditorial({ ...editorial, skipReview1: v })}
+                          onCheckedChange={(v) => setEditorial({ ...editorial, skipReview1: v === true })}
                           className="data-[state=checked]:bg-purple-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1410,7 +1418,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={editorial.skipReview2}
-                          onCheckedChange={(v) => setEditorial({ ...editorial, skipReview2: v })}
+                          onCheckedChange={(v) => setEditorial({ ...editorial, skipReview2: v === true })}
                           className="data-[state=checked]:bg-purple-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1429,7 +1437,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={editorial.skipReview3}
-                          onCheckedChange={(v) => setEditorial({ ...editorial, skipReview3: v })}
+                          onCheckedChange={(v) => setEditorial({ ...editorial, skipReview3: v === true })}
                           className="data-[state=checked]:bg-purple-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1492,7 +1500,7 @@ const ReportTimelineCalculator = () => {
                 <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                   <Checkbox
                     checked={creative.themeAvailable}
-                    onCheckedChange={(v) => setCreative({ ...creative, themeAvailable: v })}
+                    onCheckedChange={(v) => setCreative({ ...creative, themeAvailable: v === true })}
                     className="data-[state=checked]:bg-green-600"
                   />
                   <Label className="text-sm text-slate-700 cursor-pointer">
@@ -1503,7 +1511,7 @@ const ReportTimelineCalculator = () => {
                 <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors border-2 border-green-200">
                   <Checkbox
                     checked={creative.overlapEditorialCreative}
-                    onCheckedChange={(v) => setCreative({ ...creative, overlapEditorialCreative: v })}
+                    onCheckedChange={(v) => setCreative({ ...creative, overlapEditorialCreative: v === true })}
                     className="data-[state=checked]:bg-green-600"
                   />
                   <Label className="text-sm font-medium text-green-800 cursor-pointer">
@@ -1576,7 +1584,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={creative.skipConceptRev1}
-                          onCheckedChange={(v) => setCreative({ ...creative, skipConceptRev1: v })}
+                          onCheckedChange={(v) => setCreative({ ...creative, skipConceptRev1: v === true })}
                           className="data-[state=checked]:bg-green-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1595,7 +1603,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={creative.skipConceptRev2}
-                          onCheckedChange={(v) => setCreative({ ...creative, skipConceptRev2: v })}
+                          onCheckedChange={(v) => setCreative({ ...creative, skipConceptRev2: v === true })}
                           className="data-[state=checked]:bg-green-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1724,7 +1732,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={design.skipReview1}
-                          onCheckedChange={(v) => setDesign({ ...design, skipReview1: v })}
+                          onCheckedChange={(v) => setDesign({ ...design, skipReview1: v === true })}
                           className="data-[state=checked]:bg-orange-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1743,7 +1751,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={design.skipReview2}
-                          onCheckedChange={(v) => setDesign({ ...design, skipReview2: v })}
+                          onCheckedChange={(v) => setDesign({ ...design, skipReview2: v === true })}
                           className="data-[state=checked]:bg-orange-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1762,7 +1770,7 @@ const ReportTimelineCalculator = () => {
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                         <Checkbox
                           checked={design.skipReview3}
-                          onCheckedChange={(v) => setDesign({ ...design, skipReview3: v })}
+                          onCheckedChange={(v) => setDesign({ ...design, skipReview3: v === true })}
                           className="data-[state=checked]:bg-orange-600"
                         />
                         <Label className="text-sm text-slate-700">Skip</Label>
@@ -1825,7 +1833,7 @@ const ReportTimelineCalculator = () => {
                 <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                   <Checkbox
                     checked={webDeliverablesRequired}
-                    onCheckedChange={setWebDeliverablesRequired}
+                    onCheckedChange={(c) => setWebDeliverablesRequired(c === true)}
                     className="data-[state=checked]:bg-teal-600"
                   />
                   <Label className="text-sm text-slate-700 cursor-pointer font-medium">
