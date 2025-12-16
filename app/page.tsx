@@ -65,7 +65,11 @@ const ReportTimelineCalculator = () => {
     skipRev1: false,
     skipRev2: false,
     finalSubmissionAuto: true,
-    overlapEditorialCreative: false
+    overlapEditorialCreative: false,
+    conceptRev1: 3,
+    conceptRev2: 3,
+    skipConceptRev1: false,
+    skipConceptRev2: false
   });
 
   // Publication design & layout
@@ -308,10 +312,17 @@ const ReportTimelineCalculator = () => {
       + editorial.finalReview
       + editorial.contingency;
 
-    const creativeDays = (creative.themeAvailable ? 0 : creative.themeDays)
+    const themePartDays = creative.themeAvailable ? 0 : (
+      creative.themeDays
       + (!creative.skipRev1 ? creative.themeRev1 : 0)
       + (!creative.skipRev2 ? creative.themeRev2 : 0)
-      + creative.designDuration;
+    );
+
+    const conceptPartDays = creative.designDuration
+      + (!creative.skipConceptRev1 ? creative.conceptRev1 : 0)
+      + (!creative.skipConceptRev2 ? creative.conceptRev2 : 0);
+
+    const creativeDays = themePartDays + conceptPartDays;
 
     const pagesPerDay = design.layoutType === 'text-based' ? 10 : 5;
     const basePagesPerDay = pagesPerDay * Math.max(1, design.numberOfDesigners);
@@ -358,13 +369,16 @@ const ReportTimelineCalculator = () => {
       let creativeEnd, creativeStart, editorialEnd, editorialStart;
 
       if (creative.overlapEditorialCreative) {
-        // When overlapping, both phases end at designStart
-        // They start at different times based on their durations
-        creativeEnd = designStart;
-        creativeStart = addWorkingDays(creativeEnd, -creativeDays, false);
+        // When overlapping, aligned to start date of editorial (Start Aligned)
+        // We calculate the start point such that the longer phase finishes exactly when Design starts.
+        const maxDuration = Math.max(editorialDays, creativeDays);
+        const commonStart = addWorkingDays(designStart, -maxDuration, false);
 
-        editorialEnd = designStart;
-        editorialStart = addWorkingDays(editorialEnd, -editorialDays, false);
+        editorialStart = commonStart;
+        editorialEnd = addWorkingDays(editorialStart, editorialDays, true);
+
+        creativeStart = commonStart;
+        creativeEnd = addWorkingDays(creativeStart, creativeDays, true);
       } else {
         // Sequential: Creative ends when Design starts, Editorial ends when Creative starts
         creativeEnd = designStart;
@@ -390,17 +404,48 @@ const ReportTimelineCalculator = () => {
         editorialReviews.push({ name: `${displayClientName} Review 2`, date: addWorkingDays(editorialStart, cumulativeDays, true) });
         cumulativeDays += editorial.clientReview2;
       }
+
+      // Calculate review dates for Creative
+      // Note: We calculate these relative to creativeStart regardless of backward/forward mode because we want milestones *during* the phase
+      const creativeReviews = [];
+      let accCreative = 0;
+
+      // Theme Loop
+      if (!creative.themeAvailable) {
+        accCreative += creative.themeDays;
+        if (!creative.skipRev1) {
+          creativeReviews.push({ name: 'Theme Review 1', date: addWorkingDays(creativeStart, accCreative, true) });
+          accCreative += creative.themeRev1;
+        }
+        if (!creative.skipRev2) {
+          creativeReviews.push({ name: 'Theme Review 2', date: addWorkingDays(creativeStart, accCreative, true) });
+          accCreative += creative.themeRev2;
+        }
+      }
+
+      // Concept Loop
+      accCreative += creative.designDuration;
+      if (!creative.skipConceptRev1) {
+        creativeReviews.push({ name: 'Concept Review 1', date: addWorkingDays(creativeStart, accCreative, true) });
+        accCreative += creative.conceptRev1;
+      }
+      if (!creative.skipConceptRev2) {
+        creativeReviews.push({ name: 'Concept Review 2', date: addWorkingDays(creativeStart, accCreative, true) });
+        accCreative += creative.conceptRev2;
+      }
       if (!editorial.skipReview3) {
         editorialReviews.push({ name: `${displayClientName} Review 3`, date: addWorkingDays(editorialStart, cumulativeDays, true) });
       }
 
       phases = [
         { name: 'Editorial & Content', start: editorialStart, end: editorialEnd, days: editorialDays, reviews: editorialReviews },
-        { name: 'Creative Development', start: creativeStart, end: creativeEnd, days: creativeDays, theme: creative.themeAvailable ? 'Theme available' : 'Theme development' },
-        { name: 'Design & Layout', start: designStart, end: designEnd, days: designDays, milestones: [
-          { name: 'Half Delivery', date: design50 },
-          { name: 'Full Delivery', date: designEnd }
-        ]},
+        { name: 'Creative Theme Development', start: creativeStart, end: creativeEnd, days: creativeDays, theme: creative.themeAvailable ? 'Theme available' : 'Theme development', reviews: creativeReviews },
+        {
+          name: 'Design & Layout', start: designStart, end: designEnd, days: designDays, milestones: [
+            { name: 'Half Delivery', date: design50 },
+            { name: 'Full Delivery', date: designEnd }
+          ]
+        },
       ];
 
       if (webDeliverablesRequired) phases.push({ name: 'Web Deliverables', start: webStart, end: webEnd, days: webDays });
@@ -468,13 +513,43 @@ const ReportTimelineCalculator = () => {
         editorialReviewsForward.push({ name: `${displayClientNameForward} Review 3`, date: addWorkingDays(editorialStart, cumulativeDaysForward, true) });
       }
 
+      // Calculate review dates for Creative (Forward)
+      const creativeReviewsForward = [];
+      let accCreativeFwd = 0;
+
+      // Theme Loop
+      if (!creative.themeAvailable) {
+        accCreativeFwd += creative.themeDays;
+        if (!creative.skipRev1) {
+          creativeReviewsForward.push({ name: 'Theme Review 1', date: addWorkingDays(creativeStart, accCreativeFwd, true) });
+          accCreativeFwd += creative.themeRev1;
+        }
+        if (!creative.skipRev2) {
+          creativeReviewsForward.push({ name: 'Theme Review 2', date: addWorkingDays(creativeStart, accCreativeFwd, true) });
+          accCreativeFwd += creative.themeRev2;
+        }
+      }
+
+      // Concept Loop
+      accCreativeFwd += creative.designDuration;
+      if (!creative.skipConceptRev1) {
+        creativeReviewsForward.push({ name: 'Concept Review 1', date: addWorkingDays(creativeStart, accCreativeFwd, true) });
+        accCreativeFwd += creative.conceptRev1;
+      }
+      if (!creative.skipConceptRev2) {
+        creativeReviewsForward.push({ name: 'Concept Review 2', date: addWorkingDays(creativeStart, accCreativeFwd, true) });
+        accCreativeFwd += creative.conceptRev2;
+      }
+
       phases = [
         { name: 'Editorial & Content', start: editorialStart, end: editorialEnd, days: editorialDays, reviews: editorialReviewsForward },
-        { name: 'Creative Development', start: creativeStart, end: creativeEnd, days: creativeDays, theme: creative.themeAvailable ? 'Theme available' : 'Theme development' },
-        { name: 'Design & Layout', start: designStart, end: designEnd, days: designDays, milestones: [
-          { name: 'Half Delivery', date: design50 },
-          { name: 'Full Delivery', date: designEnd }
-        ]},
+        { name: 'Creative Theme Development', start: creativeStart, end: creativeEnd, days: creativeDays, theme: creative.themeAvailable ? 'Theme available' : 'Theme development', reviews: creativeReviewsForward },
+        {
+          name: 'Design & Layout', start: designStart, end: designEnd, days: designDays, milestones: [
+            { name: 'Half Delivery', date: design50 },
+            { name: 'Full Delivery', date: designEnd }
+          ]
+        },
       ];
 
       if (webDeliverablesRequired) phases.push({ name: 'Web Deliverables', start: webStart, end: webEnd, days: webDays });
@@ -778,7 +853,7 @@ const ReportTimelineCalculator = () => {
         }
         doc.text(`Final Review: ${savedData.editorial.finalReview} days`, col2, yPosition);
         yPosition += 3.5;
-      } else if (phase.name === 'Creative Development') {
+      } else if (phase.name === 'Creative Theme Development') {
         doc.text(`Theme Development: ${savedData.creative.moodboardProduction} days`, col1, yPosition);
         doc.text(`${savedData.clientName || 'Client'} Review 1: ${savedData.creative.creativeReview} days`, col2, yPosition);
         doc.text(`${savedData.clientName || 'Client'} Review 2: ${savedData.creative.daysPerRound} days`, col3, yPosition);
@@ -1407,7 +1482,7 @@ const ReportTimelineCalculator = () => {
         <Card className="shadow rounded-lg overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white cursor-pointer p-3" onClick={() => toggleSection('creative')}>
             <CardTitle className="flex items-center justify-between text-base">
-              <span>Creative Development</span>
+              <span>Creative Theme Development</span>
               {expandedSections.creative ? <ChevronUp /> : <ChevronDown />}
             </CardTitle>
           </CardHeader>
@@ -1432,7 +1507,7 @@ const ReportTimelineCalculator = () => {
                     className="data-[state=checked]:bg-green-600"
                   />
                   <Label className="text-sm font-medium text-green-800 cursor-pointer">
-                    Overlap: Run Editorial & Content Development and Creative Development simultaneously
+                    Overlap: Run Editorial & Content Development and Creative Theme Development simultaneously
                   </Label>
                 </div>
 
@@ -1492,6 +1567,47 @@ const ReportTimelineCalculator = () => {
                       placeholder="0"
                     />
                     <p className="text-xs text-slate-500">Days</p>
+                  </div>
+
+                  {/* Concept Reviews */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">Concept Review 1</Label>
+                      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                        <Checkbox
+                          checked={creative.skipConceptRev1}
+                          onCheckedChange={(v) => setCreative({ ...creative, skipConceptRev1: v })}
+                          className="data-[state=checked]:bg-green-600"
+                        />
+                        <Label className="text-sm text-slate-700">Skip</Label>
+                        <Input
+                          type="number"
+                          value={creative.conceptRev1}
+                          onChange={e => setCreative({ ...creative, conceptRev1: parseInt(e.target.value) || 0 })}
+                          className="flex-1 transition-all duration-200 focus:ring-2 focus:ring-green-500"
+                          placeholder="Days"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">Concept Review 2</Label>
+                      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                        <Checkbox
+                          checked={creative.skipConceptRev2}
+                          onCheckedChange={(v) => setCreative({ ...creative, skipConceptRev2: v })}
+                          className="data-[state=checked]:bg-green-600"
+                        />
+                        <Label className="text-sm text-slate-700">Skip</Label>
+                        <Input
+                          type="number"
+                          value={creative.conceptRev2}
+                          onChange={e => setCreative({ ...creative, conceptRev2: parseInt(e.target.value) || 0 })}
+                          className="flex-1 transition-all duration-200 focus:ring-2 focus:ring-green-500"
+                          placeholder="Days"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1851,7 +1967,7 @@ const ReportTimelineCalculator = () => {
                 {timeline.phases.filter(p => p.name !== 'Statutory Period').map((phase, idx) => {
                   const phaseMap: Record<string, string> = {
                     'Editorial & Content': 'Editorial & Content',
-                    'Creative Development': 'Creative Development',
+                    'Creative Theme Development': 'Creative Theme Development',
                     'Design & Layout': 'Design & Layout',
                     'Web Deliverables': 'Web Deliverables',
                     'Print Production': 'Print Production',
@@ -1862,7 +1978,7 @@ const ReportTimelineCalculator = () => {
                   // Determine border color based on phase type
                   const borderColors: Record<string, string> = {
                     'Editorial & Content': 'border-purple-600',
-                    'Creative Development': 'border-green-600',
+                    'Creative Theme Development': 'border-green-600',
                     'Design & Layout': 'border-orange-600',
                     'Web Deliverables': 'border-teal-600',
                     'Print Production': 'border-red-600',
@@ -1897,7 +2013,7 @@ const ReportTimelineCalculator = () => {
                       )}
 
                       {/* Creative Development Details */}
-                      {phase.name === 'Creative Development' && (
+                      {phase.name === 'Creative Theme Development' && (
                         <div className="mt-4 p-3 bg-green-50 rounded-lg border-l-2 border-green-300">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2 text-sm text-slate-700">
                             {!creative.themeAvailable && <div>Theme Development: {creative.themeDays} days</div>}
